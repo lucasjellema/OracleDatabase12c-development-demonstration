@@ -1,0 +1,165 @@
+JSON
+
+-- return string with the score in the 2nd match
+
+select json_value
+       ( '{"matches": [ {"matchLineUp": "NED-ESP", "score": "5-2","matchDate":"13-06-2014"}
+                     , {"matchLineUp": "SWI-FRA", "score": "2-5","matchDate":"20-06-2014"}
+                     , {"matchLineUp": "GER-BRA", "score": "1-7","matchDate":"08-07-2014"}
+                     ]}'
+       , '$.matches[1].score') as "2nd_match_score"
+from   dual 
+
+
+-- return JSON Array with the result for all matches
+select json_query
+       ( '{"matches": [ {"matchLineUp": "NED-ESP", "score": "5-2","matchDate":"13-06-2014"}
+                     , {"matchLineUp": "SWI-FRA", "score": "2-5","matchDate":"20-06-2014"}
+                     , {"matchLineUp": "GER-BRA", "score": "1-7","matchDate":"08-07-2014"}
+                     ]}'
+       , '$.matches[*].score' WITH WRAPPER) as "scores array"
+from   dual       
+
+
+-- return a single record for each of the matches in the JSON document
+
+with match_results as
+(select '{"matches": [ {"matchLineUp": "NED-ESP", "score": "5-2","matchDate":"13-06-2014"}
+                     , {"matchLineUp": "SWI-FRA", "score": "2-5","matchDate":"20-06-2014"}
+                     , {"matchLineUp": "GER-BRA", "score": "1-7","matchDate":"08-07-2014"}
+                     ]}' json_doc
+from   dual
+)
+select lineUp, score, to_date(matchDate, 'DD-MM-YYYY') matchDate
+from   match_results
+,      json_table( json_doc, '$.matches[*]'
+         COLUMNS 
+         ( lineUp varchar2(20) PATH '$.matchLineUp'
+         , score varchar2(20) PATH '$.score'
+         , matchDate varchar2(20) PATH '$.matchDate'
+         )
+       )
+
+
+
+create or replace type number_table as table of number(3)
+
+
+with match_results as
+(select '{"matches": [ {"matchLineUp": "NED-ESP", "score": "5-2","matchDate":"13-06-2014", "goals": [1,0,0,0,0,0]}
+                     , {"matchLineUp": "SWI-FRA", "score": "2-5","matchDate":"20-06-2014", "goals": [1,1,1,1,1,0,0]}
+                     , {"matchLineUp": "GER-BRA", "score": "1-7","matchDate":"08-07-2014", "goals": [0,0,0,0,0,0,0,1]}
+                     ]}' json_doc
+from   dual
+)
+select lineUp, score, to_date(matchDate, 'DD-MM-YYYY') matchDate
+--, goals
+,    (select sum(goal) from json_table(goals , '$[0][*]' COLUMNS (goal number(1) PATH '$'))) number_of_goals
+,    cast(multiset (select goal from json_table(goals , '$[0][*]' COLUMNS (goal number(1) PATH '$')))  as number_table) goal_list
+,    (select listagg(goal,',') within group (order by rownum) from json_table(goals , '$[0][*]' COLUMNS (goal number(1) PATH '$'))) number_of_goals
+from   match_results
+,      json_table( json_doc, '$.matches[*]'
+         COLUMNS 
+         ( lineUp varchar2(20) PATH '$.matchLineUp'
+         , score varchar2(20) PATH '$.score'
+         , matchDate varchar2(20) PATH '$.matchDate'
+         , goals    VARCHAR2(100 CHAR) FORMAT JSON WITH WRAPPER PATH '$.goals'
+         )
+       )
+
+
+
+-- this works, but is not very useful
+with 
+function retrieve_score(p_line_up in varchar2, p_matches_json in varchar2) 
+return varchar2
+is
+  l_result varchar2(200);
+begin
+  select json_value(p_matches_json, '$.matches[1].score')
+  into l_result
+  from dual;
+  return l_result;
+end;  
+match_results as
+(select '{"matches": [ {"matchLineUp": "NED-ESP", "score": "5-2","matchDate":"13-06-2014", "goals": [1,0,0,0,0,0]}
+                     , {"matchLineUp": "SWI-FRA", "score": "2-5","matchDate":"20-06-2014", "goals": [1,1,1,1,1,0,0]}
+                     , {"matchLineUp": "GER-BRA", "score": "1-7","matchDate":"08-07-2014", "goals": [0,0,0,0,0,0,0,1]}
+                     ]}' json_doc
+from   dual
+)
+select retrieve_score( 'NED-ESP', json_doc) score
+from   match_results
+
+
+
+
+-- some limitations:
+with 
+function retrieve_score(p_line_up in varchar2, p_matches_json in varchar2) 
+return varchar2
+is
+  l_result varchar2(200);
+  l_index  pls_integer:=0;
+  l_json_path varchar2(200);
+begin
+  -- there is no JSON path (similar to XPath) to do things like:
+  -- json_value(p_matches_json, '$.matches[matchLineUp="NED_ESP"].score')
+  
+  -- this fails too - SQL Error: ORA-06552: PL/SQL: ORA-40454: path expression not a literal
+  -- aopparently, the JSON path has to be a constnt in the program code
+  l_json_path:= '$.matches['||l_index||'].matchLineUp';
+  select json_value(p_matches_json, l_json_path )
+  into   l_result
+  from dual;
+   
+  return l_result;
+end;  
+match_results as
+(select '{"matches": [ {"matchLineUp": "NED-ESP", "score": "5-2","matchDate":"13-06-2014", "goals": [1,0,0,0,0,0]}
+                     , {"matchLineUp": "SWI-FRA", "score": "2-5","matchDate":"20-06-2014", "goals": [1,1,1,1,1,0,0]}
+                     , {"matchLineUp": "GER-BRA", "score": "1-7","matchDate":"08-07-2014", "goals": [0,0,0,0,0,0,0,1]}
+                     ]}' json_doc
+from   dual
+)
+select retrieve_score( 'NED-ESP', json_doc) score
+from   match_results
+
+
+-- and as a result, this next code snippet does not run either:
+
+
+with 
+function retrieve_score(p_line_up in varchar2, p_matches_json in varchar2) 
+return varchar2
+is
+  l_result varchar2(200);
+  l_index  pls_integer:=0;
+begin
+  -- there is no JSON path (similar to XPath) to do things like:
+  -- json_value(p_matches_json, '$.matches[matchLineUp="NED_ESP"].score')
+  loop
+    select json_value(p_matches_json, '$.matches['||l_index||'].matchLineUp')
+    into   l_result
+    from dual;
+    if l_result = p_line_up
+    then
+      select json_value(p_matches_json, '$.matches['||l_index||'].score')
+      into   l_result
+      from   dual;
+      exit;
+    end if ;
+    l_index := l_index + 1;
+    exit when l_index > 100;
+  end loop;
+  return l_result;
+end;  
+match_results as
+(select '{"matches": [ {"matchLineUp": "NED-ESP", "score": "5-2","matchDate":"13-06-2014", "goals": [1,0,0,0,0,0]}
+                     , {"matchLineUp": "SWI-FRA", "score": "2-5","matchDate":"20-06-2014", "goals": [1,1,1,1,1,0,0]}
+                     , {"matchLineUp": "GER-BRA", "score": "1-7","matchDate":"08-07-2014", "goals": [0,0,0,0,0,0,0,1]}
+                     ]}' json_doc
+from   dual
+)
+select retrieve_score( 'NED-ESP', json_doc) score
+from   match_results

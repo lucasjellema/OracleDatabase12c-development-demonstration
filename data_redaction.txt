@@ -1,0 +1,191 @@
+grant execute on dbms_redact to hr;
+
+BEGIN
+  DBMS_REDACT.ADD_POLICY(
+  object_schema => 'hr',
+  object_name => 'emp',
+  column_name => 'sal',
+  policy_name => 'hide_salary',
+  function_type => DBMS_REDACT.FULL,
+  expression => '1=1'
+  );
+END;
+
+
+
+
+BEGIN
+  DBMS_REDACT.drop_POLICY(
+  object_schema => 'hr',
+  object_name => 'emp',
+  policy_name => 'hide_salary'
+  );
+END;
+
+select * from emp
+
+MPNO ENAME      JOB        MGR HIREDATE  SAL    COMM DEPTNO
+----- ---------- --------- ---- --------- --- ------- ------
+ 7369 SMITH      CLERK     7902 17-DEC-80   0             20 
+ 7499 ALLEN      SALESMAN  7698 20-FEB-81   0     300     30 
+ 7521 WARD       SALESMAN  7698 22-FEB-81   0     500     30 
+ 7566 JONES      MANAGER   7839 02-APR-81   0             20 
+ 7654 MARTIN     SALESMAN  7698 28-SEP-81   0    1400     30 
+
+
+
+
+
+BEGIN
+  DBMS_REDACT.ADD_POLICY(
+    object_schema => 'scott',
+    object_name => 'emp',
+    column_name => 'job',
+    policy_name => 'partially mask job',
+    function_type => DBMS_REDACT.REGEXP,
+expression => '1=1',
+regexp_pattern => '([A-Z]{3})([A-Z]{2})([A-Z]{+})',
+regexp_replace_string => '\1XX\3',
+regexp_position => 1,
+regexp_occurrence => 0,
+regexp_match_parameter => 'ic');
+END;
+
+
+
+finding
+When creating a second redaction policy on table emp on a different column than the first, this error was shown:
+
+Error report:
+ORA-28069: A data redaction policy already exists on this object.
+ORA-06512: at "SYS.DBMS_REDACT_INT", line 3
+ORA-06512: at "SYS.DBMS_REDACT", line 36
+ORA-06512: at line 2
+
+solution:
+
+create first policy, then user ALTER_POLICY to extend the policy with more columns
+
+begin
+DBMS_REDACT.DROP_POLICY (
+object_schema => 'scott',
+object_name => 'emp',
+policy_name => 'hide_salary');
+end;
+
+-- mask first three characters in every group of three characters
+ BEGIN
+DBMS_REDACT.ADD_POLICY(
+object_schema => 'hr',
+object_name => 'emp',
+column_name => 'job',
+policy_name => 'partially mask job',
+function_type => DBMS_REDACT.REGEXP,
+expression => '1=1',
+regexp_pattern => '[A-Z]{3}',
+regexp_replace_string => 'XXX',
+regexp_position => 1,
+regexp_occurrence => 0,
+regexp_match_parameter => 'ic');
+END;
+
+begin
+DBMS_REDACT.DROP_POLICY (
+object_schema => 'hr',
+object_name => 'emp',
+policy_name => 'partially mask job');
+end;
+
+
+-- mask all but first two characters in job
+
+ BEGIN
+DBMS_REDACT.ADD_POLICY(
+object_schema => 'scott',
+object_name => 'emp',
+column_name => 'job',
+policy_name => 'partially mask job',
+function_type => DBMS_REDACT.PARTIAL,
+function_parameters => 'VVVVVVVVV,VVVVVVVVV,*,3,12',
+expression => '1=1'
+);
+END;
+
+
+JOB     
+---------
+CL***     
+SA******  
+SA******  
+MA*****   
+SA******  
+MA*****   
+MA*****   
+AN*****   
+PR******* 
+SA******  
+CL***   
+
+ BEGIN
+DBMS_REDACT.ADD_POLICY(
+object_schema => 'scott',
+object_name => 'emp',
+column_name => 'sal',
+policy_name => 'partially mask sal',
+function_type => DBMS_REDACT.PARTIAL,
+function_parameters => '8,1,3',
+expression => '1=1'
+);
+END;
+
+SAL
+---
+888 
+8880 
+8880 
+8885 
+8880
+
+
+-- block day and month from hiredate
+ BEGIN
+DBMS_REDACT.ADD_POLICY(
+object_schema => 'hr',
+object_name => 'emp',
+column_name => 'hiredate',
+policy_name => 'partially mask sal',
+function_type => DBMS_REDACT.PARTIAL,
+function_parameters => 'm1d31YHMS',
+expression => '1=1'
+);
+END;
+
+HIREDATE
+---------
+31-JAN-80 
+31-JAN-81 
+31-JAN-81 
+31-JAN-81 
+31-JAN-81 
+31-JAN-81 
+
+BEGIN
+DBMS_REDACT.ADD_POLICY(
+object_schema => 'scott',
+object_name => 'emp',
+column_name => 'ename',
+policy_name => 'randomize name',
+function_type => DBMS_REDACT.RANDOM,
+expression => '1=1');
+END;
+
+
+EMPNO ENAME      JOB     
+----- ---------- ---------
+ 7369 &I5TI      CLERK     
+ 7499 J1tV8      SALESMAN  
+ 7521 y/Bk       SALESMAN  
+ 7566 =x:)R      MANAGER   
+ 7654 \v4/X      SALESMAN  
+ 7698 -u$r+      MANAGER   
+ 7782 R)uE-      MANAGER  

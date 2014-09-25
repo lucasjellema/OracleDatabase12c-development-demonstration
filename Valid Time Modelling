@@ -1,0 +1,85 @@
+Valid Time Modelling
+
+create table our_products
+( name   varchar2(100)
+, price  number(7,2)
+, start_date timestamp
+, end_date timestamp
+, PERIOD FOR offer_time (start_date, end_date)
+);
+
+
+insert into our_products
+( name, price, start_date, end_date)
+values
+('iPhone 6', 249.99, to_timestamp('31-10-2017', 'DD-MM-YYYY'), null);
+
+insert into our_products
+( name, price, start_date, end_date)
+values
+('iPhone 6', 339.99, to_timestamp('01-01-2016', 'DD-MM-YYYY'), to_timestamp('31-10-2017', 'DD-MM-YYYY'));
+insert into our_products
+( name, price, start_date, end_date)
+values
+('iPhone 6', 529.99, to_timestamp('01-04-2015', 'DD-MM-YYYY'), to_timestamp('01-01-2016', 'DD-MM-YYYY'));
+insert into our_products
+( name, price, start_date, end_date)
+values
+('iPhone 6', 649.99, to_timestamp('01-09-2014', 'DD-MM-YYYY'), to_timestamp('01-04-2015', 'DD-MM-YYYY'));
+
+begin
+  DBMS_FLASHBACK_ARCHIVE.ENABLE_AT_VALID_TIME (
+    level          => 'ASOF'
+  , query_time =>  TO_TIMESTAMP('01-10-2016', 'DD-MM-YYYY')
+  );
+end;
+
+select name, price
+from   our_products
+/
+
+begin
+  DBMS_FLASHBACK_ARCHIVE.ENABLE_AT_VALID_TIME (
+    level          => 'ASOF'
+  , query_time =>  TO_TIMESTAMP('01-10-2018', 'DD-MM-YYYY')
+  );
+end;
+
+select name, price
+from   our_products
+/
+
+begin
+  DBMS_FLASHBACK_ARCHIVE.ENABLE_AT_VALID_TIME (
+   level          => 'CURRENT');
+end;
+
+select name, price
+from   our_products
+/
+
+
+begin
+   DBMS_FLASHBACK_ARCHIVE.ENABLE_AT_VALID_TIME (
+   level          => 'ALL');
+end;
+
+
+
+select name, price
+from   our_products
+/
+
+select name, price, start_date, end_date
+from   our_products
+order
+by     start_date
+/
+
+select name, price, start_date, end_date
+from   our_products AS OF PERIOD 
+                    FOR   offer_time 
+                          TO_TIMESTAMP('01-10-2016', 'DD-MM-YYYY')
+/
+
+

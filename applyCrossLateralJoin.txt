@@ -1,0 +1,150 @@
+-- extended (+) capabilities for multi table join
+with a as
+( select 'I am A' name, 42 ref, 256 ref2 from dual)
+, b as
+( select 'I am B' name, 42 id from dual)
+, c as
+( select 'Yo, I am C' name, 1 id from dual)
+select A.name A_NAME
+,      b.name B_NAME
+,      c.name C_NAME
+from   A
+,      B
+,      C
+where  A.ref  = B.id (+)
+and    A.ref2 = C.id (+)
+
+
+
+SELECT *
+FROM   emp e
+,      LATERAL( SELECT *
+                FROM dept d
+                WHERE e.deptno = d.deptno
+              )
+
+			  
+SELECT *
+FROM   emp e
+       cross join
+       LATERAL( SELECT *
+                FROM dept d
+                WHERE e.deptno = d.deptno
+              )
+       cross join
+       LATERAL( SELECT e2.ename manager
+                FROM   emp e2
+                WHERE  e2.deptno = e.deptno
+                and    e2.job ='MANAGER'
+              )
+
+SELECT * FROM dept D
+CROSS APPLY
+   (
+   SELECT * FROM EMP E
+   WHERE E.DEPTNO = D.DEPTNO
+   ) A 
+
+DEPTNO DNAME          LOC           EMPNO ENAME      JOB        MGR HIREDATE      SAL    COMM DEPTNO
+------ -------------- ------------- ----- ---------- --------- ---- --------- ------- ------- ------
+    20 RESEARCH       DALLAS         7369 SMITH      CLERK     7902 17-DEC-80     800             20 
+    30 SALES          CHICAGO        7499 ALLEN      SALESMAN  7698 20-FEB-81    1600     300     30 
+    30 SALES          CHICAGO        7521 WARD       SALESMAN  7698 22-FEB-81    1250     500     30 
+    20 RESEARCH       DALLAS         7566 JONES      MANAGER   7839 02-APR-81    2975             20 
+    30 SALES          CHICAGO        7654 MARTIN     SALESMAN  7698 28-SEP-81    1250    1400     30 
+    30 SALES          CHICAGO        7698 BLAKE      MANAGER   7839 01-MAY-81    2850             30 
+    10 ACCOUNTING     NEW YORK       7782 CLARK      MANAGER   7839 09-JUN-81    2450             10 
+    20 RESEARCH       DALLAS         7788 SCOTT      ANALYST   7566 09-DEC-82    3000             20 
+    10 ACCOUNTING     NEW YORK       7839 KING       PRESIDENT      17-NOV-81    5000             10 
+    30 SALES          CHICAGO        7844 TURNER     SALESMAN  7698 08-SEP-81    1500       0     30 
+    20 RESEARCH       DALLAS         7876 ADAMS      CLERK     7788 12-JAN-83    1100             20 
+    30 SALES          CHICAGO        7900 JAMES      CLERK     7698 03-DEC-81     950             30 
+    20 RESEARCH       DALLAS         7902 FORD       ANALYST   7566 03-DEC-81    3000             20 
+    10 ACCOUNTING     NEW YORK       7934 MILLER     CLERK     7782 23-JAN-82    1300             10 
+
+
+SELECT * FROM dept D
+OUTER APPLY
+   (
+   SELECT * FROM EMP E
+   WHERE E.DEPTNO = D.DEPTNO
+   ) A 
+
+   DEPTNO DNAME          LOC           EMPNO ENAME      JOB        MGR HIREDATE      SAL    COMM DEPTNO
+------ -------------- ------------- ----- ---------- --------- ---- --------- ------- ------- ------
+    20 RESEARCH       DALLAS         7369 SMITH      CLERK     7902 17-DEC-80     800             20 
+    30 SALES          CHICAGO        7499 ALLEN      SALESMAN  7698 20-FEB-81    1600     300     30 
+    30 SALES          CHICAGO        7521 WARD       SALESMAN  7698 22-FEB-81    1250     500     30 
+    20 RESEARCH       DALLAS         7566 JONES      MANAGER   7839 02-APR-81    2975             20 
+    30 SALES          CHICAGO        7654 MARTIN     SALESMAN  7698 28-SEP-81    1250    1400     30 
+    30 SALES          CHICAGO        7698 BLAKE      MANAGER   7839 01-MAY-81    2850             30 
+    10 ACCOUNTING     NEW YORK       7782 CLARK      MANAGER   7839 09-JUN-81    2450             10 
+    20 RESEARCH       DALLAS         7788 SCOTT      ANALYST   7566 09-DEC-82    3000             20 
+    10 ACCOUNTING     NEW YORK       7839 KING       PRESIDENT      17-NOV-81    5000             10 
+    30 SALES          CHICAGO        7844 TURNER     SALESMAN  7698 08-SEP-81    1500       0     30 
+    20 RESEARCH       DALLAS         7876 ADAMS      CLERK     7788 12-JAN-83    1100             20 
+    30 SALES          CHICAGO        7900 JAMES      CLERK     7698 03-DEC-81     950             30 
+    20 RESEARCH       DALLAS         7902 FORD       ANALYST   7566 03-DEC-81    3000             20 
+    10 ACCOUNTING     NEW YORK       7934 MILLER     CLERK     7782 23-JAN-82    1300             10 
+    40 OPERATIONS     BOSTON                                                                         
+
+ 15 rows selected 
+
+ create or replace type string_tbl as table of varchar2(200)
+ 
+  
+ create or replace 
+ function employees_in_department
+ ( p_deptno in number
+ ) return string_tbl
+ as
+   l_enames string_tbl;
+ begin
+   select cast(collect(ename) as string_tbl)
+   into   l_enames
+   from   emp
+   where  deptno = p_deptno
+   ;
+   return l_enames;
+end;   
+ 
+show err
+
+select dname
+,      deptno
+,      employees_in_department(deptno) staff
+from   dept
+
+SELECT *
+FROM   DEPT d
+       OUTER APPLY
+       employees_in_department(deptno) staff
+
+15 rows
+	DEPTNO DNAME          LOC           COLUMN_VALUE                                                                                                                                                                                           
+------ -------------- ------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    10 ACCOUNTING     NEW YORK      CLARK                                                                                                                                                                                                    
+    10 ACCOUNTING     NEW YORK      KING                                                                                                                                                                                                     
+    10 ACCOUNTING     NEW YORK      MILLER                                                                                                                                                                                                   
+    20 RESEARCH       DALLAS        SMITH                                                                                                                                                                                                    
+    20 RESEARCH       DALLAS        JONES                                                                                                                                                                                                    
+    20 RESEARCH       DALLAS        SCOTT                                                                                                                                                                                                    
+    20 RESEARCH       DALLAS        ADAMS                                                                                                                                                                                                    
+    20 RESEARCH       DALLAS        FORD                                                                                                                                                                                                     
+    30 SALES          CHICAGO       ALLEN                                                                                                                                                                                                    
+    30 SALES          CHICAGO       WARD                                                                                                                                                                                                     
+    30 SALES          CHICAGO       MARTIN                                                                                                                                                                                                   
+    30 SALES          CHICAGO       BLAKE                                                                                                                                                                                                    
+    30 SALES          CHICAGO       TURNER                                                                                                                                                                                                   
+    30 SALES          CHICAGO       JAMES                                                                                                                                                                                                    
+    40 OPERATIONS     BOSTON                                                                                                                                                                                                                 
+
+ 15 rows selected    
+	   
+SELECT *
+FROM   DEPT d
+       CROSS APPLY
+       employees_in_department(deptno) staff
+
+14 records (not operations)	   
+

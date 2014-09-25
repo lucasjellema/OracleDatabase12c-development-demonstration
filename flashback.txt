@@ -1,0 +1,195 @@
+flashback.txt
+
+http://docs.oracle.com/database/121/ARPLS/d_flashb_archive.htm#ARPLS72463
+
+as SYS:
+
+create table oow.emp as select * from scott.emp
+
+grant execute on dbms_flashback_archive to oow;
+grant execute on dbms_flashback to oow;
+
+CREATE FLASHBACK ARCHIVE DEFAULT one_year TABLESPACE users
+  QUOTA 100M RETENTION 1 YEAR;
+
+grant flashback archive on one_year to oow
+
+exec dbms_flashback_archive.create_temp_history_table('OOW', 'EMP');
+
+grant FLASHBACK_ARCHIVE_ADMINISTER to oow
+
+-- this statement once in a database instance
+-- This will extend mappings to the past so that import of old history can be done. Goes back to 01-JAN-88.
+EXEC DBMS_FLASHBACK_ARCHIVE.extend_mappings();
+
+-- after some history has been created:
+EXEC DBMS_FLASHBACK_ARCHIVE.IMPORT_HISTORY('oow','EMP');
+
+
+as OOW:
+
+select ename
+,      job
+,      sal
+from   emp as of timestamp (systimestamp - INTERVAL '1' DAY) yester_emp 
+
+
+ALTER TABLE emp FLASHBACK ARCHIVE one_year;
+
+-- as SYS: exec dbms_flashback_archive.create_temp_history_table('OOW', 'EMP');
+
+describe oow.temp_history
+
+describe oow.temp_history
+Name      Null Type           
+--------- ---- -------------- 
+RID            VARCHAR2(4000) 
+STARTSCN       NUMBER         
+ENDSCN         NUMBER         
+XID            RAW(8 BYTE)    
+OPERATION      VARCHAR2(1)    
+EMPNO          NUMBER(4)      
+ENAME          VARCHAR2(10)   
+JOB            VARCHAR2(9)    
+MGR            NUMBER(4)      
+HIREDATE       DATE           
+SAL            NUMBER(7,2)    
+COMM           NUMBER(7,2)    
+DEPTNO         NUMBER(2)      
+
+
+-- start creating the past:
+
+insert into temp_history 
+(RID , STARTSCN , ENDSCN  , XID, OPERATION
+,EMPNO, sal
+)
+values (NULL, timestamp_to_scn(to_date('01-JAN-06')), timestamp_to_scn(to_date('31-DEC-06')), NULL, 'U', 1, 1000);
+
+commit;
+
+
+select * 
+from emp as of timestamp to_date('06-JUN-06') 
+where empno=1
+
+
+    EMPNO ENAME      JOB              MGR HIREDATE                               SAL       COMM     DEPTNO
+---------- ---------- --------- ---------- ------------------------------- ---------- ---------- ----------
+         1                                                                       1000                       
+
+
+-- create some more past:
+
+
+-- as SYS: exec dbms_flashback_archive.create_temp_history_table('OOW', 'EMP');
+
+-- create emoployee
+-- hired as Clerk in 2001 in dept 10, salary 2200
+-- moved still as Clerk in 2003 in dept 20
+-- promoted to Salesman in 2006 with new salary 3400
+-- salary increated in 2008 to 3800
+-- promoted to manager in 2010
+-- left the company in 2012
+
+
+insert into temp_history 
+(RID , STARTSCN , ENDSCN  , XID, OPERATION ,EMPNO, ename, job, hiredate, sal, deptno
+)
+values (NULL, timestamp_to_scn(to_date('01-04-2001', 'DD-MM-YYYY')), timestamp_to_scn(to_date('01-07-2003', 'DD-MM-YYYY')), NULL, 'I'
+, 1567, 'SELLERS','CLERK', to_date('01-04-2001', 'DD-MM-YYYY'), 2200, 10);
+
+insert into temp_history 
+(RID , STARTSCN , ENDSCN  , XID, OPERATION
+,EMPNO, ename, job, hiredate, sal, deptno
+)
+values (NULL, timestamp_to_scn(to_date('01-07-2003', 'DD-MM-YYYY')), timestamp_to_scn(to_date('01-10-2006', 'DD-MM-YYYY')), NULL, 'U'
+, 1567, 'SELLERS','CLERK', to_date('01-04-2001', 'DD-MM-YYYY'), 2200, 20);
+
+
+insert into temp_history 
+(RID , STARTSCN , ENDSCN  , XID, OPERATION
+,EMPNO, ename, job, hiredate, sal, deptno
+)
+values (NULL, timestamp_to_scn(to_date('01-10-2006', 'DD-MM-YYYY')), timestamp_to_scn(to_date('01-04-2008', 'DD-MM-YYYY')), NULL, 'U'
+, 1567, 'SELLERS','SALESMAN', to_date('01-04-2001', 'DD-MM-YYYY'), 3400, 20);
+
+insert into temp_history 
+(RID , STARTSCN , ENDSCN  , XID, OPERATION
+,EMPNO, ename, job, hiredate, sal, deptno
+)
+values (NULL, timestamp_to_scn(to_date('01-04-2008', 'DD-MM-YYYY')), timestamp_to_scn(to_date('01-06-2010', 'DD-MM-YYYY')), NULL, 'U'
+, 1567, 'SELLERS','SALESMAN', to_date('01-04-2001', 'DD-MM-YYYY'), 3800, 20);
+
+
+insert into temp_history 
+(RID , STARTSCN , ENDSCN  , XID, OPERATION
+,EMPNO, ename, job, hiredate, sal, deptno
+)
+values (NULL, timestamp_to_scn(to_date('01-06-2010', 'DD-MM-YYYY')), timestamp_to_scn(to_date('31-10-2012', 'DD-MM-YYYY')), NULL, 'U'
+, 1567, 'SELLERS','MANAGER', to_date('01-04-2001', 'DD-MM-YYYY'), 3800, 20);
+
+
+insert into temp_history 
+(RID , STARTSCN , ENDSCN  , XID, OPERATION
+,EMPNO, ename, job, hiredate, sal, deptno
+)
+values (NULL, timestamp_to_scn(to_date('31-10-2012', 'DD-MM-YYYY')), NULL, NULL, 'D'
+, 1567, 'SELLERS','MANAGER', to_date('01-04-2001', 'DD-MM-YYYY'), 3800, 20);
+
+--as sys:  EXEC DBMS_FLASHBACK_ARCHIVE.IMPORT_HISTORY('oow','EMP');
+
+
+
+
+SELECT versions_startscn, versions_starttime,
+       versions_endscn, versions_endtime,
+       versions_xid, versions_operation,
+       empno, ename, sal
+  FROM emp
+  VERSIONS BETWEEN TIMESTAMP
+      TO_TIMESTAMP('2004-12-18 14:00:00', 'YYYY-MM-DD HH24:MI:SS')
+  AND maxvalue
+  WHERE EMPNO = 1567
+
+
+  ERSIONS_STARTSCN VERSIONS_STARTTIME              VERSIONS_ENDSCN VERSIONS_ENDTIME                VERSIONS_XID     VERSIONS_OPERATION      EMPNO ENAME             SAL
+----------------- ------------------------------- --------------- ------------------------------- ---------------- ------------------ ---------- ---------- ----------
+           238082 30-JUN-03 11.26.14.000000000 PM          288055 30-SEP-06 11.48.36.000000000 PM                  U                        1567 SELLERS          2200 
+           288055 30-SEP-06 11.48.36.000000000 PM          311106 31-MAR-08 11.41.10.000000000 PM                  U                        1567 SELLERS          3400 
+           311106 31-MAR-08 11.41.10.000000000 PM          344379 31-MAY-10 11.46.52.000000000 PM                  U                        1567 SELLERS          3800 
+           344379 31-MAY-10 11.46.52.000000000 PM          381523 30-OCT-12 11.29.48.000000000 PM                  U                        1567 SELLERS          3800 
+
+
+select ename
+,      job
+from   emp as of timestamp (systimestamp - INTERVAL '10' YEAR) yester_emp 
+
+
+
+select ename
+,      job
+from   emp as of timestamp (systimestamp - INTERVAL '10' YEAR) yester_emp 
+minus
+select ename
+,      job
+from   emp 
+
+ENAME      JOB     
+---------- ---------
+SELLERS    CLERK     
+
+
+select ename
+,      job
+from   emp as of timestamp (systimestamp - INTERVAL '4' YEAR) yester_emp 
+minus
+select ename
+,      job
+from   emp 
+
+ENAME      JOB     
+---------- ---------
+SELLERS    MANAGER   
+
+

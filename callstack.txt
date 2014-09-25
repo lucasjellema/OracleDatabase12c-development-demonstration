@@ -1,0 +1,96 @@
+create or replace 
+package callstack_demo
+as
+function c
+( p_a in number
+) return number
+;
+end callstack_demo;
+
+
+
+create or replace 
+package body callstack_demo
+as
+
+procedure tell_on_call_stack
+is
+  l_prg_uqn UTL_CALL_STACK.UNIT_QUALIFIED_NAME;
+begin
+  dbms_output.put_line('==== TELL ON CALLSTACK ==== '||UTL_CALL_STACK.DYNAMIC_DEPTH );
+  for i in 1..UTL_CALL_STACK.DYNAMIC_DEPTH loop
+    l_prg_uqn := UTL_CALL_STACK.SUBPROGRAM(i);
+      dbms_output.put_line( l_prg_uqn(1)||' line '||UTL_CALL_STACK.UNIT_LINE(i)
+	  ||' '||UTL_Call_Stack.Concatenate_Subprogram(UTL_Call_Stack.Subprogram(i)));
+  end loop;
+end tell_on_call_stack;
+
+
+function b
+( p1 in number
+, p2 in number
+) return number
+is
+  l number:=1;
+begin
+  tell_on_call_stack;
+  l:= l* p1+ p2;
+  
+  return l;
+end b;  
+
+procedure a
+( p1 in number
+, p2 out number)
+is
+begin
+  tell_on_call_stack;
+  null;
+  -- and more null;
+  null;
+  for i in 1..p1 loop
+     p2:= b(i, p1);
+  end loop;
+end a;
+
+function c
+( p_a in number
+) return number
+is
+ l number;
+begin
+  tell_on_call_stack;
+  a(p_a, l);
+  return l;
+end c;
+
+end callstack_demo;
+
+begin
+  dbms_output.put_line(callstack_demo.c(2));
+end;  
+
+
+==== TELL ON CALLSTACK ==== 3
+TELL_ON_CALL_STACK line 12
+C line 54
+__anonymous_block line 2
+==== TELL ON CALLSTACK ==== 4
+TELL_ON_CALL_STACK line 12
+A line 39
+C line 55
+__anonymous_block line 2
+==== TELL ON CALLSTACK ==== 5
+TELL_ON_CALL_STACK line 12
+B line 28
+A line 44
+C line 55
+__anonymous_block line 2
+==== TELL ON CALLSTACK ==== 5
+TELL_ON_CALL_STACK line 12
+B line 28
+A line 44
+C line 55
+__anonymous_block line 2
+4
+

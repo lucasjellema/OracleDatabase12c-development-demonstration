@@ -1,0 +1,247 @@
+Inline PL/SQL functions
+
+
+WITH
+FUNCTION CamelCase(operand varchar2) RETURN varchar2 IS
+BEGIN
+  RETURN initcap(operand);
+END;
+SELECT CamelCase(ename)
+from   emp
+
+WITH
+FUNCTION tomorrow(operand date) RETURN date IS
+BEGIN
+  RETURN operand + 1;
+END;
+SELECT tomorrow(hiredate)
+from   emp
+
+
+fails:
+WITH
+FUNCTION inc(operand number) RETURN number IS
+BEGIN
+  RETURN operand + 1;
+END;
+SELECT inc(sal)
+from   emp
+
+
+WITH
+FUNCTION devowel(string VARCHAR2) RETURN VARCHAR2 IS
+BEGIN
+  RETURN translate(string, 'zaeiuoAEIOU','z');
+END;
+SELECT devowel(ename)
+from   emp
+
+
+
+WITH
+FUNCTION devowel(string VARCHAR2) RETURN VARCHAR2 IS
+BEGIN
+  RETURN translate(string, 'zaeiuoAEIOU','z');
+END;
+SELECT devowel(object_name)
+from   user_objects
+where  rownum<30
+
+
+
+
+-- recursive invocation is allowed:
+WITH
+FUNCTION inc(string VARCHAR2) RETURN VARCHAR2 IS
+  value number(10):= to_number(string);
+BEGIN
+  if value < 6000
+  then
+    return inc(value+100);
+  else
+    RETURN to_char(value + 100);
+  END if;
+end;
+SELECT inc(sal)
+from   emp
+
+-- or in this case with number parameters
+
+with 
+function fac(p_val in number)
+return number
+is
+begin
+  if p_val=0
+  then
+    return 1;
+  end if;
+  return p_val * fac(trunc(p_val -1));
+end;
+select rownum operand
+,      fac(rownum) faculty
+from   dual
+connect
+by     rownum < 10
+
+
+
+-- combining inline PL/SQL with inline Views  
+  
+with
+procedure camel(p_string in out varchar2)
+is
+begin
+  p_string:= initcap(p_string);
+end;
+function obfuscate(p_string in varchar2)
+return varchar2
+is
+  l_string varchar2(100);
+begin
+  l_string:= translate(upper(p_string), 'AEUIO','OIEUA');
+  camel(l_string);
+  return l_string;
+end;
+my_view as (
+select obfuscate('Goedemorgen')
+from   dual
+)
+select *
+from   my_view
+
+
+
+
+
+create type string_table as table of varchar2(200)
+
+-- fails with ORA-01787: only one clause allowed per query block
+WITH
+FUNCTION values RETURN string_table IS
+BEGIN
+  return string_table('BE', 'UK','NL','FR');
+end;
+SELECT values
+from   dual
+
+
+WITH
+FUNCTION v RETURN string_table IS
+BEGIN
+  return string_table('BE', 'UK','NL','FR');
+end;
+SELECT v(1)
+from   dual
+
+procedures can be created as well as functions;
+functions and procedures can invoke each other:
+
+WITH 
+procedure increment( operand in out number, incsize in number)
+is
+begin
+  operand:= operand + incsize;
+end;
+FUNCTION inc(string VARCHAR2) RETURN VARCHAR2 IS
+  value number(10):= to_number(string);
+BEGIN
+   increment(value, 100);
+   RETURN to_char(value);
+end;
+SELECT inc(sal)
+from   emp
+
+
+WITH 
+FUNCTION inc(string VARCHAR2) RETURN VARCHAR2 IS
+  value number(10):= to_number(string);
+BEGIN
+    RETURN to_char(value + 100);
+end;
+top3 as
+( select ename
+  ,      sal
+  from   emp
+  order
+  by     sal desc
+  fetch  first 3 rows only
+)
+SELECT inc(sal)
+from   top3
+
+
+
+this one fails:  (ORA-00904: "INC": invalid identifier)
+WITH 
+FUNCTION inc(string VARCHAR2) RETURN VARCHAR2 IS
+  value number(10):= to_number(string);
+BEGIN
+    RETURN to_char(value + 100);
+end;
+top3 as
+( select ename
+  ,      inc(sal)
+  from   emp
+  order
+  by     sal desc
+  fetch  first 3 rows only
+)
+SELECT *
+from   top3
+
+
+ORA-22806: not an object or REF
+WITH
+FUNCTION vals(param varchar2) RETURN string_table IS
+BEGIN
+  return string_table('BE', 'UK','NL','FR');
+end;
+SELECT vals('p').count
+from   dual
+
+
+fails: 	ORA-22163: left hand and right hand side collections are not of same type
+
+WITH
+FUNCTION vals(param varchar2) RETURN string_table IS
+BEGIN
+  return string_table('BE', 'UK','NL','FR');
+end;
+SELECT cardinality(vals('p'))
+from   dual
+
+fails: 	ORA-22163: left hand and right hand side collections are not of same type
+
+WITH
+FUNCTION vals(param varchar2) RETURN string_table IS
+BEGIN
+  return string_table('BE', 'UK','NL','FR');
+end;
+SELECT *
+from   table(vals('p'))
+
+
+seems to run okay:
+WITH
+FUNCTION vals(param varchar2) RETURN string_table IS
+BEGIN
+  return string_table('BE', 'UK','NL','FR');
+end;
+SELECT vals('p')
+from   dual
+
+[unsupported data type => in APEX]
+
+-- dynamic SQL inside is allowed
+WITH
+FUNCTION EMP_ENRICHER(operand varchar2) RETURN varchar2 IS
+  sql_stmt varchar2(500);
+  job      varchar2(500);
+BEGIN
+   sql_stmt := 'SELECT job FROM emp WHERE ename = :param';
+   EXECUTE IMMEDIATE sql_stmt INTO job USING operand;
+  RETURN ' has job '||job;
+END;
+SELECT ename || EMP_ENRICHER(ename)
+from   emp

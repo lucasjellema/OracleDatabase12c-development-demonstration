@@ -1,0 +1,460 @@
+create table events
+( seq  number(5)
+, payload varchar2(200)
+)
+
+insert into events values (1, 'red');
+insert into events values (2, 'blue');
+insert into events values (3, 'yellow');
+insert into events values (4, 'red');
+insert into events values (5, 'white');
+insert into events values (6, 'blue');
+insert into events values (7, 'red');
+insert into events values (8, 'yellow');
+insert into events values (9, 'blue');
+insert into events values (29, 'red');
+insert into events values (11, 'white');
+insert into events values (12, 'red');
+insert into events values (13, 'blue');
+insert into events values (14, 'blue');
+insert into events values (15, 'green');
+insert into events values (16, 'blue');
+insert into events values (17, 'yellow');
+insert into events values (18, 'red');
+insert into events values (19, 'yellow');
+insert into events values (20, 'red');
+insert into events values (10, 'blue');
+
+
+SELECT *
+FROM   events 
+MATCH_RECOGNIZE 
+(
+  ORDER BY seq
+  MEASURES RED.seq AS redseq
+  ,        MATCH_NUMBER() AS match_num
+  ALL ROWS PER MATCH
+  PATTERN (RED YELLOW BLUE)
+  DEFINE
+  RED AS RED.payload ='red',
+  YELLOW AS YELLOW.payload ='yellow',
+  BLUE AS BLUE.payload ='blue'
+) MR
+ORDER 
+BY     MR.redseq
+,      MR.seq;
+
+
+  SEQ REDSEQ MATCH_NUM PAYLOAD                                                                                                                                                                                                
+----- ------ --------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    7      7         1 red                                                                                                                                                                                                      
+    8      7         1 yellow                                                                                                                                                                                                   
+    9      7         1 blue      
+
+	
+	
+with look_ahead_events as
+( SELECT e.*
+  ,      lead(payload) over (order by seq) next_color
+  ,      lead(payload,2) over (order by seq) second_next_color
+  FROM   events  e
+)
+select  seq
+from    look_ahead_events
+where   payload ='red' 
+and     next_color ='yellow' 
+and     second_next_color='blue'
+
+  SEQ
+-----
+    7 
+
+ 
+	
+Find a string of three consecutive hires in the same job
+SELECT *
+FROM   EMP
+MATCH_RECOGNIZE 
+(
+  ORDER BY hiredate
+  MEASURES SAME_JOB.hiredate AS hireday
+  ,        MATCH_NUMBER() AS match_num
+  ALL ROWS PER MATCH
+  PATTERN (SAME_JOB{3}) -- 2 times the situation that an employee has the same job as a previously hired employee which means three in a row with the same job
+  DEFINE
+  SAME_JOB AS SAME_JOB.job = FIRST(SAME_JOB.job)
+) MR
+
+
+HIREDATE  HIREDAY   MATCH_NUM EMPNO ENAME      JOB        MGR     SAL    COMM DEPTNO
+--------- --------- --------- ----- ---------- --------- ---- ------- ------- ------
+01-MAY-81 01-MAY-81         1  7698 BLAKE      MANAGER   7839    2850             30 
+09-JUN-81 09-JUN-81         1  7782 CLARK      MANAGER   7839    2450             10	
+	
+	
+with lookahead_emps as
+( SELECT e.*
+  ,      lead(job) over (order by hiredate) next_job
+  ,      lead(job,2) over (order by hiredate) second_next_job
+  FROM   EMP e
+)
+select *
+from   lookahead_emps
+where  job = next_job
+and    job = second_next_job
+
+EMPNO ENAME      JOB        MGR HIREDATE      SAL    COMM DEPTNO NEXT_JOB  SECOND_NEXT_JOB
+----- ---------- --------- ---- --------- ------- ------- ------ --------- ---------------
+ 7566 JONES      MANAGER   7839 02-APR-81    2975             20 MANAGER   MANAGER         
+	
+
+create type number_tbl as table of number;
+
+with rallypoints as
+( select column_value player , rownum seq
+  from   table(number_tbl(1,0,0,1,0,0,1,1,1,0,1,1,1,0,0,0,0))
+)
+SELECT *
+FROM   rallypoints 
+MATCH_RECOGNIZE 
+(
+  ORDER BY seq
+  MEASURES C.seq AS seq
+  ,        MATCH_NUMBER() AS match_num
+  ONE ROW PER MATCH
+  PATTERN (A+? C)
+  DEFINE
+            C  as (case C.player 
+                    when 1 then sum(A.player) else (sum(abs((A.player-1))))
+                    end >= 3
+                    and case C.player 
+                        when 1 then sum(A.player*2-1) else (sum(1-A.player*2))
+                        end >= 1)
+) MR
+
+
+
+create or replace type game_event_t as object 
+( rally_sequence number(10)
+, winning_player number(1)
+)
+/
+
+create type game_event_tbl_t
+as table of game_event_t
+/
+
+with 
+function game_detector(points number_tbl)
+return game_event_tbl_t
+is
+  sql_stmt varchar2(1500);
+  l_tbl game_event_tbl_t:= game_event_tbl_t( );
+begin
+  sql_stmt := 'SELECT game_event_t( seq, player)
+FROM   (select column_value player, rownum as seq from table(:rallypoints)) 
+MATCH_RECOGNIZE 
+(
+  ORDER BY seq
+  MEASURES C.seq AS seq, C.player as player
+  ,        MATCH_NUMBER() AS match_num
+  ONE ROW PER MATCH
+  PATTERN (A+? C)
+  DEFINE
+            C  as (case C.player 
+                    when 1 then sum(A.player) else (sum(abs((A.player-1))))
+                    end >= 3
+                    and case C.player 
+                        when 1 then sum(A.player*2-1) else (sum(1-A.player*2))
+                        end >= 1)
+) MR
+';
+   EXECUTE IMMEDIATE sql_stmt BULK COLLECT INTO l_tbl USING points;
+   return l_tbl;
+end;
+rallypoints as
+( select column_value player , rownum seq
+  from   table(number_tbl(1,0,0,1,0,0,1,1,1,0,1,1,1,0,0,0,0))
+)
+select *
+from   table( game_detector(cast( multiset(select player from rallypoints order by seq) as number_tbl)))
+
+
+
+with 
+function game_detector(points number_tbl)
+return game_event_tbl_t
+is
+  sql_stmt varchar2(1500);
+  l_tbl game_event_tbl_t:= game_event_tbl_t( );
+begin
+  sql_stmt := 'SELECT game_event_t( seq, player)
+FROM   (select column_value player, rownum as seq from table(:rallypoints)) 
+MATCH_RECOGNIZE 
+(
+  ORDER BY seq
+  MEASURES C.seq AS seq, C.player as player
+  ,        MATCH_NUMBER() AS match_num
+  ONE ROW PER MATCH
+  PATTERN (A+? C)
+  DEFINE
+            C  as (case C.player 
+                    when 1 then sum(A.player) else (sum(abs((A.player-1))))
+                    end >= 3
+                    and case C.player 
+                        when 1 then sum(A.player*2-1) else (sum(1-A.player*2))
+                        end >= 1)
+) MR
+';
+   EXECUTE IMMEDIATE sql_stmt BULK COLLECT INTO l_tbl USING points;
+   return l_tbl;
+end;
+function set_detector(points number_tbl)
+return game_event_tbl_t
+is
+  sql_stmt varchar2(1500);
+  l_tbl game_event_tbl_t:= game_event_tbl_t( );
+begin
+  sql_stmt := 'SELECT game_event_t( seq, player)
+FROM   (select column_value player, rownum as seq from table(:rallypoints)) 
+MATCH_RECOGNIZE 
+(
+  ORDER BY seq
+  MEASURES C.seq AS seq, C.player as player
+  ,        MATCH_NUMBER() AS match_num
+  ONE ROW PER MATCH
+  PATTERN (A+? C)
+  DEFINE
+            C  as (case C.player 
+                    when 1 then sum(A.player) else (sum(abs((A.player-1))))
+                    end >= 5
+                    and case C.player 
+                        when 1 then sum(A.player*2-1) else (sum(1-A.player*2))
+                        end >= 1)
+) MR
+';
+   EXECUTE IMMEDIATE sql_stmt BULK COLLECT INTO l_tbl USING points;
+   return l_tbl;
+end;
+rallypoints as
+( select column_value player , rownum seq
+  from   table(number_tbl(
+        0,0,1,1,0,1,1,1
+        ,1,0,0,0,1,0
+        ,1,1,1,1
+        ,0,0,1,1,0,1,0,0
+        ,1,0,0,0,0
+        ,0,0,1,1,0,1,0,0
+        ,1,0,0,0,0
+        ,0,0,1,1,0,1,0,0
+        ,1,1,0,1,1
+        ,1,1,1,0,0,0,1,0,0,1,0,1,1,0,1,1
+        ,0,0,0,0
+        ,0,0,0,0
+        ,0,0,0,0
+        ,0,0,1,1,0,0
+        ,1,1,0,1,1
+        ,1,0,0,1,0,1,1,1
+        ,1,0,1,0,1,1
+        ,1,1,0,1,1
+        ,1,0,0,1,1,1
+        ,0,1,1,1,1
+        ,0,0,0,0
+        ,1,1,0,0,1,1
+        ,0,0,1,1,1,0,0,0
+        ,1,1,0,0,1,1
+        ,1,0,1,1,1
+        ,0,0,1,0,1,1,1,1))
+)
+, gamepoints as
+( select *
+  from   table( game_detector(cast( multiset(select player from rallypoints order by seq) as number_tbl)))
+)
+, setpoints as
+( select * 
+  from   table( set_detector(cast( multiset(select winning_player from gamepoints) as number_tbl)))
+)
+select rally_sequence after_game
+,      winning_player
+from   setpoints
+
+
+-- find won matches:
+
+with 
+function game_detector(points number_tbl)
+return game_event_tbl_t
+is
+  sql_stmt varchar2(1500);
+  l_tbl game_event_tbl_t:= game_event_tbl_t( );
+begin
+  sql_stmt := 'SELECT game_event_t( seq, player)
+FROM   (select column_value player, rownum as seq from table(:rallypoints)) 
+MATCH_RECOGNIZE 
+(
+  ORDER BY seq
+  MEASURES C.seq AS seq, C.player as player
+  ,        MATCH_NUMBER() AS match_num
+  ONE ROW PER MATCH
+  PATTERN (A+? C)
+  DEFINE
+            C  as (case C.player 
+                    when 1 then sum(A.player) else (sum(abs((A.player-1))))
+                    end >= 3
+                    and case C.player 
+                        when 1 then sum(A.player*2-1) else (sum(1-A.player*2))
+                        end >= 1)
+) MR
+';
+   EXECUTE IMMEDIATE sql_stmt BULK COLLECT INTO l_tbl USING points;
+   return l_tbl;
+end;
+function set_detector(points number_tbl)
+return game_event_tbl_t
+is
+  sql_stmt varchar2(1500);
+  l_tbl game_event_tbl_t:= game_event_tbl_t( );
+begin
+  sql_stmt := 'SELECT game_event_t( seq, player)
+FROM   (select column_value player, rownum as seq from table(:rallypoints)) 
+MATCH_RECOGNIZE 
+(
+  ORDER BY seq
+  MEASURES C.seq AS seq, C.player as player
+  ,        MATCH_NUMBER() AS match_num
+  ONE ROW PER MATCH
+  PATTERN (A+? C)
+  DEFINE
+            C  as (case C.player 
+                    when 1 then sum(A.player) else (sum(abs((A.player-1))))
+                    end >= 5
+                    and case C.player 
+                        when 1 then sum(A.player*2-1) else (sum(1-A.player*2))
+                        end >= 1)
+) MR
+';
+   EXECUTE IMMEDIATE sql_stmt BULK COLLECT INTO l_tbl USING points;
+   return l_tbl;
+end;
+function match_detector(points number_tbl)
+return game_event_tbl_t
+is
+  sql_stmt varchar2(1500);
+  l_tbl game_event_tbl_t:= game_event_tbl_t( );
+begin
+  sql_stmt := 'SELECT game_event_t( seq, player)
+FROM   (select column_value player, rownum as seq from table(:rallypoints)) 
+MATCH_RECOGNIZE 
+(
+  ORDER BY seq
+  MEASURES C.seq AS seq, C.player as player
+  ,        MATCH_NUMBER() AS match_num
+  ONE ROW PER MATCH
+  PATTERN (A+? C)
+  DEFINE
+            C  as (case C.player 
+                    when 1 then sum(A.player) else (sum(abs((A.player-1))))
+                    end >= 1
+                    and case C.player 
+                        when 1 then sum(A.player*2-1) else (sum(1-A.player*2))
+                        end >= 0)
+) MR
+';
+   EXECUTE IMMEDIATE sql_stmt BULK COLLECT INTO l_tbl USING points;
+   return l_tbl;
+end;
+rallypoints as
+( select column_value player , rownum seq
+  from   table(number_tbl(
+        0,0,1,1,0,1,1,1
+        ,1,0,0,0,1,0
+        ,1,1,1,1
+        ,0,0,1,1,0,1,0,0
+        ,1,0,0,0,0
+        ,0,0,1,1,0,1,0,0
+        ,1,0,0,0,0
+        ,0,0,1,1,0,1,0,0
+        ,1,1,0,1,1
+        ,1,1,1,0,0,0,1,0,0,1,0,1,1,0,1,1
+        ,0,0,0,0
+        ,0,0,0,0
+        ,0,0,0,0
+        ,0,0,1,1,0,0
+        ,1,1,0,1,1
+        ,1,0,0,1,0,1,1,1
+        ,1,0,1,0,1,1
+        ,1,1,0,1,1
+        ,1,0,0,1,1,1
+        ,0,1,1,1,1
+        ,0,0,0,0
+        ,1,1,0,0,1,1
+        ,0,0,1,1,1,0,0,0
+        ,1,1,0,0,1,1
+        ,1,0,1,1,1
+        ,0,0,1,0,1,1,1,1))
+)
+, gamepoints as
+( select *
+  from   table( game_detector(cast( multiset(select player from rallypoints order by seq) as number_tbl)))
+)
+, setpoints as
+( select * 
+  from   table( set_detector(cast( multiset(select winning_player from gamepoints) as number_tbl)))
+)
+, matchpoints as
+( select * 
+  from   table( match_detector(cast( multiset(select winning_player from setpoints) as number_tbl)))
+)
+select rally_sequence after_set
+,      winning_player
+from   matchpoints
+
+
+
+create table stocks
+    ( symbol   varchar2(10),
+     tstamp   date,
+    price    number,
+      primary key (symbol,tstamp)
+    )
+
+ declare
+        l_data sys.odciNumberList :=
+               sys.odciNumberList
+               ( 35, 34, 33, 34, 35, 36,
+               37, 36, 35, 34, 35, 36, 37 );
+        l_cnt  number := l_data.count;
+    begin
+        for i in 1 .. l_cnt
+        loop
+           insert into stocks
+           ( symbol, tstamp, price )
+           values
+           ('ORCL', sysdate-l_cnt+i, l_data(i) );
+       end loop;
+       commit;
+   end;
+
+
+ select symbol, tstamp, price,
+           rpad('*',price,'*') hist
+     from stocks
+    order by symbol, tstamp;
+ 
+
+SELECT *
+    FROM stocks MATCH_RECOGNIZE
+    ( PARTITION BY symbol
+      ORDER BY tstamp
+      MEASURES
+         STRT.tstamp AS start_tstamp,
+         LAST(DOWN.tstamp) AS bottom_tstamp,
+         LAST(UP.tstamp) AS end_tstamp
+      ONE ROW PER MATCH
+     AFTER MATCH SKIP TO LAST UP
+     PATTERN (STRT DOWN+ UP+)
+     DEFINE
+       DOWN AS DOWN.price < PREV(DOWN.price),
+       UP AS UP.price > PREV(UP.price)
+   ) MR
+    ORDER BY MR.symbol, MR.start_tstamp;

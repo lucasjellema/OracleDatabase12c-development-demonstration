@@ -1,0 +1,83 @@
+SQL Translation Profile
+
+As SYS:
+
+grant create sql translation profile to OOW;
+
+AS OOW:
+
+
+-- Drop the profile if it already exists
+-- exec DBMS_SQL_TRANSLATOR.DROP_PROFILE('HR_PROFILE');
+
+-- Create a Translation Profile
+
+exec dbms_sql_translator.create_profile('HR_PROFILE');
+
+BEGIN
+    DBMS_SQL_TRANSLATOR.REGISTER_SQL_TRANSLATION(
+      profile_name    => 'HR_PROFILE',
+      sql_text        => 'select ename, job, hiredate from emp',
+      translated_text => 'select initcap(ename) as ename, job, hiredate from emp where job<>''MANAGER'' ');
+END;
+
+desc dbms_session
+
+alter session set sql_translation_profile = HR_PROFILE
+
+alter session set events = '10601 trace name context forever, level 32';
+
+select ename, job, hiredate 
+from emp
+
+select *  FROM USER_SQL_TRANSLATION_PROFILES;
+select * from USER_SQL_TRANSLATIONS;
+
+
+set serveroutput on size 20000
+
+DECLARE
+ iClob CLOB := 'select ename, job, hiredate from emp';
+ oCLOB CLOB;
+BEGIN
+  dbms_sql_translator.translate_sql(iClob, oClob);
+  dbms_output.put_line(oClob);
+END;
+/
+
+select ename, job, hiredate from emp
+
+BEGIN
+  dbms_sql_translator.deregister_sql_translation('HR_PROFILE', 'select ename, job, hiredate from emp');
+END;
+
+
+-- a custom translator can be configured - 
+exec dbms_sql_translator.set_attribute('HR_PROFILE', dbms_sql_translator.attr_translator, 'YOUR_OWN_PACKAGE');
+
+a package that implements 
+-- PROCEDURE TRANSLATE_SQL(
+   sql_text        IN  CLOB,
+   translated_text OUT CLOB);
+ 
+PROCEDURE TRANSLATE_ERROR(
+   error_code          IN  BINARY_INTEGER,
+   translated_code     OUT BINARY_INTEGER,
+   translated_sqlstate OUT VARCHAR2);
+ 
+Parameters:
+  profile_name        - profile name
+  sql_text            - SQL statement to be translated
+  translated_text     - translated SQL statement
+  error_code          - Oracle error code
+  translated_code     - translated error code
+  translated_sqlstate - translated SQLSTATE
+
+
+-- bind variables: from JDBC they are included as :b1, :b2 etc.
+-- stored procedure calls from JDBC:
+-- exec  dbms_sql_translator.register_sql_translation('FOO', 'call sample_proc(:b1, :b2)', '{call sample_proc(:b1, :b2)}');
+-- see : http://www.morganslibrary.org/reference/pkgs/dbms_sql_translator.html
+-- see: https://blogs.oracle.com/dominicgiles/entry/sql_translator_profiles_in_oracle
+-- see: http://docs.oracle.com/database/121/DRDAA/sql_transl_arch.htm#DRDAA131
+-- http://docs.oracle.com/database/121/ARPLS/d_sql_trans.htm#ARPLS73542
