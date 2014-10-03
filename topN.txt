@@ -1,0 +1,109 @@
+select *
+from   ( select *
+         from   emp
+		 order
+		 by     sal desc
+		)
+where rownum < 4
+
+4-7
+
+select *
+from   ( select rownum rn
+         ,      e.*
+		 from   ( select *
+                  from   emp
+		          order
+		          by     sal desc
+		        ) e
+	    )
+where rn between 4 and 7
+
+
+Analytical
+
+select *
+from   ( select emp.*
+         , row_number() over (order by sal desc) rn
+         from   emp
+		 order
+		 by     sal desc
+		)
+where rn < 4
+
+select *
+from   ( select emp.*
+         ,      row_number() over (order by sal desc ) rn
+         from   emp
+		 order
+		 by     sal desc
+		)
+where rn between 4 and 7
+
+
+12c Top N Query
+
+select *
+from   emp
+order
+by     sal desc
+FETCH FIRST 3 ROWS ONLY;
+
+rank 4-7
+
+select *
+from   emp
+order
+by     sal desc
+OFFSET 4 ROWS FETCH NEXT 4 ROWS ONLY;
+
+
+
+-- last 3 
+
+select *
+from   emp
+order
+by     sal desc
+OFFSET ((select count(*) from emp)-3) ROWS FETCH NEXT 3 ROWS ONLY;
+
+
+additionally:
+first 30%
+
+
+select *
+from   emp
+order
+by     sal desc
+FETCH FIRST 30 PERCENT ROWS ONLY;
+
+-- be sure to include any rows with the same order position as the last one in the 30% group
+select *
+from   emp
+order
+by     sal desc
+FETCH FIRST 30 PERCENT ROWS WITH TIES;
+
+
+last 30% - change desc to asc; there is not FETCH LAST 30%
+
+select *
+from   emp
+order
+by     sal asc
+FETCH FIRST 30 PERCENT ROWS ONLY;
+--by     sal desc
+--FETCH LAST 30 PERCENT ROWS ONLY;
+
+
+-- fetch last 30% rows in the correct order (descending)
+select *
+from ( select *
+       from   emp
+       order
+       by     sal asc
+       FETCH FIRST 30 PERCENT ROWS ONLY
+     ) 
+order 
+by     sal desc

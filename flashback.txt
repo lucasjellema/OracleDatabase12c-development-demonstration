@@ -26,6 +26,14 @@ EXEC DBMS_FLASHBACK_ARCHIVE.extend_mappings();
 EXEC DBMS_FLASHBACK_ARCHIVE.IMPORT_HISTORY('oow','EMP');
 
 
+select TABLE_NAME, FLASHBACK_ARCHIVE_NAME, ARCHIVE_TABLE_NAME, STATUS
+     from DBA_FLASHBACK_ARCHIVE_TABLES;
+
+TABLE_NAME                                                                                                                       FLASHBACK_ARCHIVE_NAME                                                                                                                                                                                                                                          ARCHIVE_TABLE_NAME                                    STATUS      
+-------------------------------------------------------------------------------------------------------------------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ----------------------------------------------------- -------------
+EMP                                                                                                                              ONE_YEAR                                                                                                                                                                                                                                                        SYS_FBA_HIST_92031                                    ENABLED       
+
+
 as OOW:
 
 select ename
@@ -193,3 +201,88 @@ ENAME      JOB
 SELLERS    MANAGER   
 
 
+
+
+-- to find out from Flashback who performed a transaction:
+
+exec dbms_session.set_identifier('The Creepy User from the Finance Department');
+
+update emp
+set    sal = sal * 1.4 
+where  ename = 'ALLEN'
+/
+
+commit;
+
+
+exec dbms_session.set_identifier('The Scary Janitor from the Annex');
+
+update emp
+set    sal = sal * 0.7 
+where  ename = 'MILLER'
+/
+
+commit;
+
+-- regular pay raise
+exec dbms_session.set_identifier('The Finance Department');
+
+update emp
+set    sal = sal * 1.025 
+where  ename != 'KING'
+/
+
+commit;
+
+
+-- as SYS: exec dbms_flashback_archive.set_context_level(level=> 'ALL'); 
+
+-- then as SYS:
+
+
+exec dbms_session.set_identifier('The Creepy User from the Finance Department');
+
+update oow.emp
+set    sal = sal * 1.4 
+where  ename = 'ALLEN'
+/
+
+commit;
+
+
+exec dbms_session.set_identifier('The Scary Janitor from the Annex');
+
+update oow.emp
+set    sal = sal * 0.7 
+where  ename = 'MILLER'
+/
+
+commit;
+
+
+-- then query:
+
+SELECT versions_xid, versions_starttime,       
+ dbms_flashback_archive.get_sys_context (versions_xid,'USERENV','CLIENT_IDENTIFIER') who,
+empno, ename, sal new_sal
+  FROM emp
+  VERSIONS BETWEEN TIMESTAMP
+      TO_TIMESTAMP('2004-12-18 14:00:00', 'YYYY-MM-DD HH24:MI:SS')
+  AND maxvalue
+where versions_xid is not null
+
+
+
+VERSIONS_XID     VERSIONS_STARTTIME              WHO                            EMPNO ENAME         NEW_SAL
+---------------- ------------------------------- ------------------------- ---------- ---------- ----------
+01001000CE050000 24-SEP-14 02.57.12.000000000 PM The Creepy User from the        7499 ALLEN          3214.4 
+06000900DF070000 24-SEP-14 02.57.24.000000000 PM The Scary Janitor from th       7934 MILLER         652.93 
+
+
+SELECT versions_xid, versions_starttime
+,      empno, ename, sal new_sal
+,      s.authenticated_identity, s.client_identifier
+FROM   oow.emp  VERSIONS BETWEEN TIMESTAMP TO_TIMESTAMP('2004-12-18 14:00:00', 'YYYY-MM-DD HH24:MI:SS')
+                         AND maxvalue
+,      sys.sys_fba_context_aud s
+where versions_xid = s.xid
